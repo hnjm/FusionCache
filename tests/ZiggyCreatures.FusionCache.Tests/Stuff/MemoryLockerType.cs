@@ -8,5 +8,6 @@ public enum MemoryLockerType
 	//Experimental = 2
 
 	// 3RD PARTY
-	AsyncKeyed = 10
+	AsyncKeyed = 10,
+	StripedAsyncKeyed = 11,
 }

@@ -4,21 +4,19 @@ using Microsoft.Extensions.Logging;
 namespace ZiggyCreatures.Caching.Fusion.Locking.AsyncKeyed;
 
 /// <summary>
-/// An implementation of <see cref="IFusionCacheMemoryLocker"/> based on AsyncKeyedLocker.
+/// An implementation of <see cref="IFusionCacheMemoryLocker"/> based on StripedAsyncKeyedLocker.
 /// </summary>
-public sealed class AsyncKeyedMemoryLocker
+public sealed class StripedAsyncKeyedMemoryLocker
 	: IFusionCacheMemoryLocker
 {
-	private readonly AsyncKeyedLocker<string> _locker;
+	private readonly StripedAsyncKeyedLocker<string> _locker;
 
 	/// <summary>
-	/// Initializes a new instance of the <see cref="AsyncKeyedLocker"/> class.
+	/// Initializes a new instance of the <see cref="StripedAsyncKeyedLocker{TKey}"/> class.
 	/// </summary>
-	public AsyncKeyedMemoryLocker(AsyncKeyedLockOptions? options = null)
+	public StripedAsyncKeyedMemoryLocker(int numberOfStripes = 4049, int maxCount = 1, IEqualityComparer<string>? comparer = null)
 	{
-		options ??= new AsyncKeyedLockOptions();
-
-		_locker = new AsyncKeyedLocker<string>(options);
+		_locker = new StripedAsyncKeyedLocker<string>(numberOfStripes, maxCount, comparer);
 	}
 
 	/// <inheritdoc/>
@@ -34,6 +32,7 @@ public sealed class AsyncKeyedMemoryLocker
 	}
 
 	/// <inheritdoc/>
+	//[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	public void ReleaseLock(string cacheName, string cacheInstanceId, string operationId, string key, object? lockObj, ILogger? logger)
 	{
 		if (lockObj is null)
@@ -51,17 +50,17 @@ public sealed class AsyncKeyedMemoryLocker
 	}
 
 	// IDISPOSABLE
-	private bool disposedValue;
+	private bool _disposedValue;
 	private void Dispose(bool disposing)
 	{
-		if (!disposedValue)
+		if (!_disposedValue)
 		{
 			if (disposing)
 			{
-				_locker?.Dispose();
+				// EMPTY
 			}
 
-			disposedValue = true;
+			_disposedValue = true;
 		}
 	}
 
