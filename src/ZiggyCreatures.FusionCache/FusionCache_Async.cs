@@ -12,7 +12,7 @@ public partial class FusionCache
 {
 	// GET OR SET
 
-	private void ExecuteEagerRefreshWithAsyncFactory<TValue>(string operationId, string key, string[]? tags, Func<FusionCacheFactoryExecutionContext<TValue>, CancellationToken, Task<TValue>> factory, FusionCacheEntryOptions options, IFusionCacheMemoryEntry memoryEntry, object memoryLockObj)
+	private void ExecuteEagerRefreshWithAsyncFactory<TValue>(string operationId, string key, string originalKey, string[]? tags, Func<FusionCacheFactoryExecutionContext<TValue>, CancellationToken, Task<TValue>> factory, FusionCacheEntryOptions options, IFusionCacheMemoryEntry memoryEntry, object memoryLockObj)
 	{
 		// EVENT
 		_events.OnEagerRefresh(operationId, key);
@@ -73,7 +73,7 @@ public partial class FusionCache
 			var activity = Activities.Source.StartActivityWithCommonTags(Activities.Names.ExecuteFactory, CacheName, InstanceId, key, operationId);
 			activity?.SetTag(Tags.Names.FactoryEagerRefresh, true);
 
-			var ctx = FusionCacheFactoryExecutionContext<TValue>.CreateFromEntries(options, null, memoryEntry, tags);
+			var ctx = FusionCacheFactoryExecutionContext<TValue>.CreateFromEntries(key, originalKey, options, null, memoryEntry, tags);
 
 			var factoryTask = factory(ctx, default);
 
@@ -81,7 +81,7 @@ public partial class FusionCache
 		});
 	}
 
-	private async ValueTask<IFusionCacheMemoryEntry?> GetOrSetEntryInternalAsync<TValue>(string operationId, string key, string[]? tags, Func<FusionCacheFactoryExecutionContext<TValue>, CancellationToken, Task<TValue>> factory, bool isRealFactory, MaybeValue<TValue> failSafeDefaultValue, FusionCacheEntryOptions? options, Activity? activity, CancellationToken token)
+	private async ValueTask<IFusionCacheMemoryEntry?> GetOrSetEntryInternalAsync<TValue>(string operationId, string key, string originalKey, string[]? tags, Func<FusionCacheFactoryExecutionContext<TValue>, CancellationToken, Task<TValue>> factory, bool isRealFactory, MaybeValue<TValue> failSafeDefaultValue, FusionCacheEntryOptions? options, Activity? activity, CancellationToken token)
 	{
 		options ??= _defaultEntryOptions;
 
@@ -125,7 +125,7 @@ public partial class FusionCache
 						memoryEntry.Metadata.EagerExpirationTimestamp = null;
 
 					// EXECUTE EAGER REFRESH
-					ExecuteEagerRefreshWithAsyncFactory<TValue>(operationId, key, tags, factory, options, memoryEntry!, memoryLockObj);
+					ExecuteEagerRefreshWithAsyncFactory<TValue>(operationId, key, originalKey, tags, factory, options, memoryEntry!, memoryLockObj);
 				}
 			}
 
@@ -230,7 +230,7 @@ public partial class FusionCache
 					if (_logger?.IsEnabled(LogLevel.Debug) ?? false)
 						_logger.Log(LogLevel.Debug, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId} K={CacheKey}): calling the factory (timeout={Timeout})", CacheName, InstanceId, operationId, key, timeout.ToLogString_Timeout());
 
-					var ctx = FusionCacheFactoryExecutionContext<TValue>.CreateFromEntries(options, distributedEntry, memoryEntry, tags);
+					var ctx = FusionCacheFactoryExecutionContext<TValue>.CreateFromEntries(key, originalKey, options, distributedEntry, memoryEntry, tags);
 
 					// ACTIVITY
 					var activityForFactory = Activities.Source.StartActivityWithCommonTags(Activities.Names.ExecuteFactory, CacheName, InstanceId, key, operationId);
@@ -370,7 +370,7 @@ public partial class FusionCache
 
 		ValidateCacheKey(key);
 
-		MaybePreProcessCacheKey(ref key);
+		MaybePreProcessCacheKey(ref key, out var originalKey);
 
 		var tagsArray = tags.AsArray();
 
@@ -391,7 +391,7 @@ public partial class FusionCache
 
 		try
 		{
-			var entry = await GetOrSetEntryInternalAsync<TValue>(operationId, key, tagsArray, factory, true, failSafeDefaultValue, options, activity, token).ConfigureAwait(false);
+			var entry = await GetOrSetEntryInternalAsync<TValue>(operationId, key, originalKey, tagsArray, factory, true, failSafeDefaultValue, options, activity, token).ConfigureAwait(false);
 
 			if (entry is null)
 			{
@@ -421,7 +421,7 @@ public partial class FusionCache
 
 		ValidateCacheKey(key);
 
-		MaybePreProcessCacheKey(ref key);
+		MaybePreProcessCacheKey(ref key, out var originalKey);
 
 		var tagsArray = tags.AsArray();
 
@@ -439,7 +439,7 @@ public partial class FusionCache
 
 		try
 		{
-			var entry = await GetOrSetEntryInternalAsync<TValue>(operationId, key, tagsArray, (_, _) => Task.FromResult(defaultValue), false, default, options, activity, token).ConfigureAwait(false);
+			var entry = await GetOrSetEntryInternalAsync<TValue>(operationId, key, originalKey, tagsArray, (_, _) => Task.FromResult(defaultValue), false, default, options, activity, token).ConfigureAwait(false);
 
 			if (entry is null)
 			{
@@ -517,10 +517,13 @@ public partial class FusionCache
 		}
 
 		// TRY WITH DISTRIBUTED CACHE
-		FusionCacheDistributedEntry<TValue>? distributedEntry;
-		bool distributedEntryIsValid;
+		FusionCacheDistributedEntry<TValue>? distributedEntry = null;
+		bool distributedEntryIsValid = false;
 
-		(distributedEntry, distributedEntryIsValid) = await dca!.TryGetEntryAsync<TValue>(operationId, key, options, memoryEntry is not null, null, token).ConfigureAwait(false);
+		if (dca.ShouldRead(options) && dca.CanBeUsed(operationId, key))
+		{
+			(distributedEntry, distributedEntryIsValid) = await dca!.TryGetEntryAsync<TValue>(operationId, key, options, memoryEntry is not null, null, token).ConfigureAwait(false);
+		}
 
 		// TAGGING
 		if (distributedEntry is not null)
@@ -1056,7 +1059,7 @@ public partial class FusionCache
 				// CLEAR EXPIRE
 				Interlocked.Exchange(ref ClearExpireTimestamp, now);
 
-				await SetTagDataInternalAsync(ClearExpireTag, now, options, token).ConfigureAwait(false);
+				await SetTagDataInternalAsync(_options.InternalStrings.ClearExpireTag, now, options, token).ConfigureAwait(false);
 			}
 			else
 			{
@@ -1065,7 +1068,7 @@ public partial class FusionCache
 
 				if (TryExecuteRawClear(operationId) == false)
 				{
-					await SetTagDataInternalAsync(ClearRemoveTag, now, options, token).ConfigureAwait(false);
+					await SetTagDataInternalAsync(_options.InternalStrings.ClearRemoveTag, now, options, token).ConfigureAwait(false);
 				}
 			}
 

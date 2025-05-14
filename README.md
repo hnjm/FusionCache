@@ -138,6 +138,15 @@ Also, FusionCache has some nice **additional features**:
 </details>
 
 
+## Ⓜ️ Microsoft HybridCache
+
+We've probably all heard about the new kid on the block introduced by Microsoft with .NET 9: `HybridCache`.
+
+So what does it mean for FusionCache? Does one replace the other? Or can they somehow work together?
+
+It's pretty cool actually, so let's [find out](docs/MicrosoftHybridCache.md)!
+
+
 ## 📦 Packages
 
 Main packages:
@@ -336,7 +345,7 @@ Yes!
 
 FusionCache is being used **in production** on **real world projects** for years, happily handling billions of requests.
 
-Considering that the FusionCache packages have been downloaded more than **14 million times** (thanks everybody!) it may very well be used even more.
+Considering that the FusionCache packages have been downloaded more than **15 million times** (thanks everybody!) it may very well be used even more.
 
 Oh, and it is being used in products by Microsoft itself, like [Data API Builder](https://devblogs.microsoft.com/azure-sql/data-api-builder-ga/)!
 

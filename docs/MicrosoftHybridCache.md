@@ -11,7 +11,7 @@
 | FusionCache can ALSO be used as an implementation of the new `HybridCache` abstraction from Microsoft, with the added extra features of FusionCache. Oh, and it's the first production-ready implementation of HybridCache (see below). |
 
 > [!NOTE]
-> FusionCache is the FIRST 3rd party implementation of HybridCache from Microsoft. But not just that: in a strange turn of events, since at the time of this writing (Jan 2025) Microsoft has not yet released their default implementation, FusionCache is the FIRST production-ready implementation of HybridCache AT ALL, including the one by Microsoft itself. Quite bonkers 😬
+> FusionCache is the FIRST 3rd party implementation of HybridCache from Microsoft. But not just that: in a strange turn of events, since at the time of this writing (Jan 2025) Microsoft has not yet released their default implementation, FusionCache is the FIRST production-ready implementation of HybridCache AT ALL, including the one by Microsoft itself. Quite bonkers 🤯
 
 With .NET 9 Microsoft [introduced](https://www.youtube.com/watch?v=rjMfDUP4-eQ) their own hybrid cache, called [HybridCache](https://learn.microsoft.com/en-us/aspnet/core/performance/caching/hybrid?view=aspnetcore-9.0).
 
@@ -100,17 +100,17 @@ Yep, more features: read on.
 
 Let's see which features are on the table.
 
-For the Microsoft implementation, the features will be:
+For the Microsoft implementation, the features are:
 
 - cache stampede protection (also [in FusionCache](CacheStampede.md))
 - usable as L1 only (memory) or L1+L2 (memory + distributed) (also [in FusionCache](CacheLevels.md))
-- multi-node notifications (also [in FusionCache](Backplane.md))
 - tagging (also [in FusionCache](Tagging.md))
 - serialization compression (not there yet, but already working on it)
 
 FusionCache on the other hand has more, like:
 
 - [fail-safe](FailSafe.md)
+- [backplane](Backplane.md) for multi-node invalidations (⚠️ this is important, see below for more)
 - [soft/hard timeouts](Timeouts.md)
 - [adaptive caching](AdaptiveCaching.md)
 - [conditional refresh](ConditionalRefresh.md)
@@ -123,6 +123,48 @@ FusionCache on the other hand has more, like:
 - [background distributed operations](BackgroundDistributedOperations.md)
 - [full OpenTelemetry support](OpenTelemetry.md)
 - the API is both [sync+async](CoreMethods.md) (HybridCache is async-only)
+
+So FusionCache has more features, and that's ok, but one feature currently missing from the Microsoft implementation is pretty important:
+
+> [!WARNING]
+> Although initially planned, the current Microsoft implementation lacks multi-node invalidations (see [here](https://github.com/dotnet/extensions/issues/5517)). This means that when we update a value in the cache in a multi-node scenario, our nodes will be out-of-sync!
+
+Want to find out how to fixthis? Keep reading.
+
+## 📢 Multi-node invalidations
+
+As noted above, the current Microsoft implementation of HybridCache lacks support for multi-node invalidations.
+
+This can be really problematic when we need horizontal scalability (eg: a multi-nodes scenario) because it means that when we update a value on one node, all the other nodes will be out-of-sync.
+
+But wait, FusionCache has the [Backplane](https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/Backplane.md) since ages to handle exactly this, so can this solve the problem?
+
+Yes, totally 🥳
+
+By simply setting up a backplane, the HybridCache adapter will now auto-magically handle multi-nodes invalidations too, all without the need for use to do anything more.
+
+A quick example:
+
+```c#
+services.AddFusionCache()
+		// SPECIFY A SERIALIZER
+    .WithSerializer(
+        new FusionCacheNewtonsoftJsonSerializer()
+    )
+		// SPECIFY A DISTRIBUTED CACHE
+    .WithDistributedCache(
+        new RedisCache(new RedisCacheOptions { Configuration = "CONNECTION STRING" })
+    )
+		// SPECIFY A BACKPLANE
+    .WithBackplane(
+        new RedisBackplane(new RedisBackplaneOptions { Configuration = "CONNECTION STRING" })
+    )
+		// ENABLE THE HYBRIDCACHE ADAPTER
+		.AsHybridCache()
+;
+```
+
+And voilà: without changing your existing code all will work flawlessly, even when scaling horizontally 🎉
 
 ## 🚀 I Want Moar
 
@@ -139,7 +181,7 @@ Oh (x3), and since FusionCache supports both the sync and async programming mode
 
 They'll be both protected from Cache Stampede automatically, but not just separately, but also between themselves: this means that accross both the HybridCache adapter instance and the FusionCache instance, only 1 database call will be executed, total.
 
-Nice 😬
+Nice 😊
 
 ## 🚀 I Said Moar!
 
@@ -151,7 +193,7 @@ The `HybridCache` implementation from Microsoft currently available (it's in pre
 - **SINGLE INSTANCE:** it does not support multiple named caches, there can be only one
 - **NO KEYED SERVICES**: since it does not support multiple caches, it means it cannot support Microsoft's own [Keyed Services](https://learn.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection?view=aspnetcore-9.0#keyed-services)
 
-Now these are the limitation of the (current) HybridCache _implementation_, not the _abstraction_: does this mean that when using FusionCache via the HybridCache adapter, we can go above and beyound those limits?
+Now these are the limitation of the (current) HybridCache _implementation_, not the _abstraction_: does this mean that when using FusionCache via the HybridCache adapter, we can go above and beyond those limits?
 
 Yup 🎉
 
@@ -193,13 +235,13 @@ public class SomeService([FromKeyedServices("Foo")] HybridCache cache) {
 }
 ```
 
-And is it possible to do both at the same time? Of course, simply register one FusionCache with `.AsHybridCache()` and or more with `.AsKeyedHybridCache(...)`, that's it.
+Is it possible to do both at the same time? Of course, simply register one FusionCache with `.AsHybridCache()`, then add any additional caches with `.AsKeyedHybridCache(...)`. That's it!
 
 Boom!
 
 ## 🚳 Limitations
 
-The HybridCache API surface area is more limited: for example for each `GetOrCreateAsync()` call we can pass a `HybridCacheEntryOptions` object instead of a `FusionCacheEntryOptions` object.
+The HybridCache API surface area is more limited: for example for each `GetOrCreateAsync()` call we can only pass a `HybridCacheEntryOptions` object instead of a `FusionCacheEntryOptions` object.
 
 Because of this, when using FusionCache via the HybridCache adapter we can configure all of this goodness only at startup, and not on a per-call basis: still, it's a lot of power to have available for when we need or want to depend on the Microsoft abstraction.
 

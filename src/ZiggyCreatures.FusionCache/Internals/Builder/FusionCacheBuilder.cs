@@ -50,6 +50,7 @@ internal sealed class FusionCacheBuilder
 	public bool UseRegisteredOptions { get; set; }
 	public FusionCacheOptions? Options { get; set; }
 	public bool UseCacheKeyPrefix { get; set; }
+	public bool AddCacheKeyPrefixSeparator { get; set; }
 	public string? CacheKeyPrefix { get; set; }
 	public Action<FusionCacheOptions>? SetupOptionsAction { get; set; }
 
@@ -141,6 +142,10 @@ internal sealed class FusionCacheBuilder
 		if (UseCacheKeyPrefix)
 		{
 			options.CacheKeyPrefix = CacheKeyPrefix;
+			if (AddCacheKeyPrefixSeparator)
+			{
+				options.CacheKeyPrefix += options.InternalStrings.CacheKeyPrefixSeparator;
+			}
 		}
 
 		// DEFAULT ENTRY OPTIONS
@@ -379,19 +384,21 @@ internal sealed class FusionCacheBuilder
 			plugins.AddRange(serviceProvider.GetKeyedServices<IFusionCachePlugin>(PluginsServiceKey));
 		}
 
-		if (Plugins?.Count > 0)
+		if (Plugins.Count > 0)
 		{
 			plugins.AddRange(Plugins);
 		}
 
-		if (PluginsFactories?.Count > 0)
+		if (PluginsFactories.Count > 0)
 		{
 			foreach (var pluginFactory in PluginsFactories)
 			{
-				var plugin = pluginFactory?.Invoke(serviceProvider);
+				var plugin = pluginFactory.Invoke(serviceProvider);
 
 				if (plugin is not null)
+				{
 					plugins.Add(plugin);
+				}
 			}
 		}
 

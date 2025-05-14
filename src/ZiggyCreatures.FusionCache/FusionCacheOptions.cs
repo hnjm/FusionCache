@@ -20,18 +20,11 @@ public class FusionCacheOptions
 	private FusionCacheEntryOptions _tagsDefaultEntryOptions;
 
 	/// <summary>
-	/// The default value for <see cref="IFusionCache.CacheName"/>.
+	/// The default value for <see cref="CacheName"/> (and, in turn, the related <see cref="IFusionCache.CacheName"/>).
 	/// <br/><br/>
 	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/NamedCaches.md"/>
 	/// </summary>
 	public const string DefaultCacheName = "FusionCache";
-
-	/// <summary>
-	/// The cache key prefix separator used after the <see cref="CacheName"/>, when no specific <see cref="CacheKeyPrefix"/> has been specified.
-	/// <br/><br/>
-	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/NamedCaches.md"/>
-	/// </summary>
-	public const string CacheKeyPrefixSeparator = ":";
 
 	/// <summary>
 	/// The wire format version identifier for the distributed cache wire format, used in the cache key processing.
@@ -45,6 +38,7 @@ public class FusionCacheOptions
 	/// <br/><br/>
 	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/CacheLevels.md"/>
 	/// </summary>
+	[Obsolete("Please use InternalStrings.DistributedCacheWireFormatSeparator instead.", true)]
 	public const string DistributedCacheWireFormatSeparator = ":";
 
 	/// <summary>
@@ -59,6 +53,7 @@ public class FusionCacheOptions
 	/// <br/><br/>
 	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/Backplane.md"/>
 	/// </summary>
+	[Obsolete("Please use InternalStrings.BackplaneWireFormatSeparator instead.", true)]
 	public const string BackplaneWireFormatSeparator = ":";
 
 	/// <summary>
@@ -67,6 +62,8 @@ public class FusionCacheOptions
 	public FusionCacheOptions()
 	{
 		_cacheName = DefaultCacheName;
+
+		_internalStrings = new FusionCacheInternalStrings();
 
 		_defaultEntryOptions = new FusionCacheEntryOptions();
 
@@ -146,6 +143,28 @@ public class FusionCacheOptions
 	internal void SetInstanceIdInternal(string instanceId)
 	{
 		InstanceId = instanceId;
+	}
+
+	FusionCacheInternalStrings _internalStrings;
+	/// <summary>
+	/// The internal strings used by FusionCache to process cache keys, tags, and more.
+	/// <br/><br/>
+	/// <strong>DOCS:</strong> <see href="https://github.com/ZiggyCreatures/FusionCache/blob/main/docs/Options.md"/>
+	/// </summary>
+	/// <exception cref="ArgumentNullException">Thrown if an attempt is made to set this property to <see langword="null"/>.</exception>
+	public FusionCacheInternalStrings InternalStrings
+	{
+		get
+		{
+			return _internalStrings;
+		}
+		set
+		{
+			if (value is null)
+				throw new ArgumentNullException(nameof(value), "It is not possible to set the InternalStrings to null");
+
+			_internalStrings = value;
+		}
 	}
 
 	/// <summary>
@@ -546,6 +565,8 @@ public class FusionCacheOptions
 			InstanceId = InstanceId,
 
 			CacheKeyPrefix = CacheKeyPrefix,
+
+			InternalStrings = InternalStrings.Duplicate(),
 
 			DefaultEntryOptions = DefaultEntryOptions.Duplicate(),
 			TagsDefaultEntryOptions = TagsDefaultEntryOptions.Duplicate(),

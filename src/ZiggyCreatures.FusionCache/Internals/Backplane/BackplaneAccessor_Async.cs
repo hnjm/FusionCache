@@ -39,6 +39,13 @@ internal partial class BackplaneAccessor
 
 					break;
 				}
+				catch (FusionCacheInvalidOptionsException exc)
+				{
+					if (_logger?.IsEnabled(LogLevel.Critical) ?? false)
+						_logger.Log(LogLevel.Critical, exc, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId}): [BP] invalid options detected while subscribing to a backplane of type {BackplaneType}", _cache.CacheName, _cache.InstanceId, operationId, _backplane.GetType().FullName);
+
+					throw;
+				}
 				catch (Exception exc)
 				{
 					if (_logger?.IsEnabled(LogLevel.Error) ?? false)
@@ -53,6 +60,10 @@ internal partial class BackplaneAccessor
 
 			if (_logger?.IsEnabled(LogLevel.Trace) ?? false)
 				_logger.Log(LogLevel.Trace, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId}): [BP] after subscribing to backplane on channel {BackplaneChannel}", _cache.CacheName, _cache.InstanceId, operationId, channelName);
+		}
+		catch (FusionCacheInvalidOptionsException)
+		{
+			throw;
 		}
 		catch (Exception exc)
 		{
@@ -263,7 +274,7 @@ internal partial class BackplaneAccessor
 					_logger.Log(LogLevel.Debug, "FUSION [N={CacheName} I={CacheInstanceId}] (O={CacheOperationId} K={CacheKey}): [BP] a backplane notification has been received from remote cache {RemoteCacheInstanceId}, but has been ignored since there is a pending one in the auto-recovery queue which is more recent", _cache.CacheName, _cache.InstanceId, operationId, message.CacheKey, message.SourceId);
 
 				// ACTIVITY
-				activity?.SetStatus(ActivityStatusCode.Error, Activities.EventNames.BackplaneIncomingMessageConflicts);
+				//activity?.SetStatus(ActivityStatusCode.Error, Activities.EventNames.BackplaneIncomingMessageConflicts);
 				activity?.Dispose();
 
 				return;

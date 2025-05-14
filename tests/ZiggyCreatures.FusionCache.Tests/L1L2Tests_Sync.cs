@@ -22,9 +22,9 @@ public partial class L1L2Tests
 		var distributedCache = CreateDistributedCache();
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions(), memoryCache).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 		fusionCache.DefaultEntryOptions.AllowBackgroundDistributedCacheOperations = false;
-		var initialValue = fusionCache.GetOrSet<int>(keyFoo, _ => 42, new FusionCacheEntryOptions().SetDurationSec(10));
+		var initialValue = fusionCache.GetOrSet<int>(keyFoo, _ => 42, new FusionCacheEntryOptions().SetDurationSec(10), token: TestContext.Current.CancellationToken);
 		memoryCache.Remove(TestsUtils.MaybePreProcessCacheKey(keyFoo, TestingCacheKeyPrefix));
-		var newValue = fusionCache.GetOrSet<int>(keyFoo, _ => 21, new FusionCacheEntryOptions().SetDurationSec(10));
+		var newValue = fusionCache.GetOrSet<int>(keyFoo, _ => 21, new FusionCacheEntryOptions().SetDurationSec(10), token: TestContext.Current.CancellationToken);
 		Assert.Equal(initialValue, newValue);
 	}
 
@@ -38,10 +38,10 @@ public partial class L1L2Tests
 		var chaosDistributedCache = new ChaosDistributedCache(distributedCache);
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(chaosDistributedCache, TestsUtils.GetSerializer(serializerType));
 		fusionCache.DefaultEntryOptions.AllowBackgroundDistributedCacheOperations = false;
-		var initialValue = fusionCache.GetOrSet<int>(keyFoo, _ => 42, new FusionCacheEntryOptions() { Duration = TimeSpan.FromSeconds(1), IsFailSafeEnabled = true });
+		var initialValue = fusionCache.GetOrSet<int>(keyFoo, _ => 42, new FusionCacheEntryOptions() { Duration = TimeSpan.FromSeconds(1), IsFailSafeEnabled = true }, token: TestContext.Current.CancellationToken);
 		Thread.Sleep(1_500);
 		chaosDistributedCache.SetAlwaysThrow();
-		var newValue = fusionCache.GetOrSet<int>(keyFoo, _ => throw new Exception("Generic error"), new FusionCacheEntryOptions(TimeSpan.FromSeconds(1)) { IsFailSafeEnabled = true });
+		var newValue = fusionCache.GetOrSet<int>(keyFoo, _ => throw new Exception("Generic error"), new FusionCacheEntryOptions(TimeSpan.FromSeconds(1)) { IsFailSafeEnabled = true }, token: TestContext.Current.CancellationToken);
 		Assert.Equal(initialValue, newValue);
 	}
 
@@ -61,13 +61,13 @@ public partial class L1L2Tests
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions(), memoryCache);
 		fusionCache.SetupDistributedCache(chaosDistributedCache, TestsUtils.GetSerializer(serializerType));
 
-		fusionCache.Set<int>(keyFoo, 42, new FusionCacheEntryOptions().SetDurationSec(1).SetFailSafe(true));
+		fusionCache.Set<int>(keyFoo, 42, new FusionCacheEntryOptions().SetDurationSec(1).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(TimeSpan.FromSeconds(1).PlusALittleBit());
 		memoryCache.Remove(TestsUtils.MaybePreProcessCacheKey(keyFoo, TestingCacheKeyPrefix));
 		chaosDistributedCache.SetAlwaysDelayExactly(simulatedDelayMs);
 		Assert.Throws<Exception>(() =>
 		{
-			_ = fusionCache.GetOrSet<int>(keyFoo, _ => throw new Exception("Sloths are cool"), new FusionCacheEntryOptions().SetDurationSec(1).SetFailSafe(true).SetDistributedCacheTimeouts(softTimeout, hardTimeout));
+			_ = fusionCache.GetOrSet<int>(keyFoo, _ => throw new Exception("Sloths are cool"), new FusionCacheEntryOptions().SetDurationSec(1).SetFailSafe(true).SetDistributedCacheTimeouts(softTimeout, hardTimeout), token: TestContext.Current.CancellationToken);
 		});
 	}
 
@@ -92,17 +92,14 @@ public partial class L1L2Tests
 		using var fusionCache = new FusionCache(options, logger: logger);
 		fusionCache.SetupDistributedCache(chaosDistributedCache, TestsUtils.GetSerializer(serializerType));
 
-		fusionCache.Set<int>(keyFoo, 42, new FusionCacheEntryOptions().SetDuration(duration).SetFailSafe(true));
+		fusionCache.Set<int>(keyFoo, 42, new FusionCacheEntryOptions().SetDuration(duration).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(duration.PlusALittleBit());
 
 		chaosDistributedCache.SetAlwaysDelayExactly(simulatedDelay);
 
 		var sw = Stopwatch.StartNew();
-		var res = fusionCache.GetOrSet<int>(
-			keyFoo,
-			_ => throw new Exception("Sloths are cool"),
-			new FusionCacheEntryOptions().SetDurationSec(1).SetFailSafe(true).SetDistributedCacheTimeouts(softTimeout, hardTimeout)
-		);
+		var res = fusionCache.GetOrSet<int>(keyFoo, _ => throw new Exception("Sloths are cool"), new FusionCacheEntryOptions().SetDurationSec(1).SetFailSafe(true).SetDistributedCacheTimeouts(softTimeout, hardTimeout)
+, token: TestContext.Current.CancellationToken);
 		sw.Stop();
 
 		var elapsedMs = sw.GetElapsedWithSafePad().TotalMilliseconds;
@@ -131,14 +128,14 @@ public partial class L1L2Tests
 		fusionCache.DefaultEntryOptions.AllowBackgroundDistributedCacheOperations = false;
 		fusionCache.SetupDistributedCache(chaosDistributedCache, TestsUtils.GetSerializer(serializerType));
 
-		fusionCache.Set<int>(keyFoo, 1, options => options.SetDurationSec(60).SetFailSafe(true));
+		fusionCache.Set<int>(keyFoo, 1, options => options.SetDurationSec(60).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 		chaosDistributedCache.SetAlwaysThrow();
-		fusionCache.Set<int>(keyFoo, 2, options => options.SetDurationSec(60).SetFailSafe(true));
+		fusionCache.Set<int>(keyFoo, 2, options => options.SetDurationSec(60).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 		chaosDistributedCache.SetNeverThrow();
-		fusionCache.Set<int>(keyFoo, 3, options => options.SetDurationSec(60).SetFailSafe(true));
+		fusionCache.Set<int>(keyFoo, 3, options => options.SetDurationSec(60).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(circuitBreakerDuration.PlusALittleBit());
 		memoryCache.Remove(TestsUtils.MaybePreProcessCacheKey(keyFoo, TestingCacheKeyPrefix));
-		var res = fusionCache.GetOrDefault<int>(keyFoo, -1);
+		var res = fusionCache.GetOrDefault<int>(keyFoo, -1, token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(1, res);
 	}
@@ -153,10 +150,11 @@ public partial class L1L2Tests
 		options.DistributedCacheKeyModifierMode = modifierMode;
 		using var fusionCache = new FusionCache(options, memoryCache).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 		var preProcessedCacheKey = TestsUtils.MaybePreProcessCacheKey(keyFoo, options.CacheKeyPrefix);
+
 		var distributedCacheKey = modifierMode switch
 		{
-			CacheKeyModifierMode.Prefix => $"{FusionCacheOptions.DistributedCacheWireFormatVersion}{FusionCacheOptions.DistributedCacheWireFormatSeparator}{preProcessedCacheKey}",
-			CacheKeyModifierMode.Suffix => $"{preProcessedCacheKey}{FusionCacheOptions.DistributedCacheWireFormatSeparator}{FusionCacheOptions.DistributedCacheWireFormatVersion}",
+			CacheKeyModifierMode.Prefix => $"{FusionCacheOptions.DistributedCacheWireFormatVersion}{options.InternalStrings.DistributedCacheWireFormatSeparator}{preProcessedCacheKey}",
+			CacheKeyModifierMode.Suffix => $"{preProcessedCacheKey}{options.InternalStrings.DistributedCacheWireFormatSeparator}{FusionCacheOptions.DistributedCacheWireFormatVersion}",
 			_ => preProcessedCacheKey,
 		};
 		var value = "sloths";
@@ -208,12 +206,12 @@ public partial class L1L2Tests
 
 		Assert.Throws<ChaosException>(() =>
 		{
-			fusionCache.Set<int>(keyFoo, 42);
+			fusionCache.Set<int>(keyFoo, 42, token: TestContext.Current.CancellationToken);
 		});
 
 		Assert.Throws<ChaosException>(() =>
 		{
-			_ = fusionCache.TryGet<int>(keyBar);
+			_ = fusionCache.TryGet<int>(keyBar, token: TestContext.Current.CancellationToken);
 		});
 	}
 
@@ -235,12 +233,12 @@ public partial class L1L2Tests
 
 		Assert.Throws<FusionCacheDistributedCacheException>(() =>
 		{
-			fusionCache.Set<int>(keyFoo, 42);
+			fusionCache.Set<int>(keyFoo, 42, token: TestContext.Current.CancellationToken);
 		});
 
 		Assert.Throws<FusionCacheDistributedCacheException>(() =>
 		{
-			_ = fusionCache.TryGet<int>(keyBar);
+			_ = fusionCache.TryGet<int>(keyBar, token: TestContext.Current.CancellationToken);
 		});
 	}
 
@@ -256,11 +254,11 @@ public partial class L1L2Tests
 
 		logger.LogInformation("STEP 1");
 
-		cache.Set<string>("foo", "sloths, sloths everywhere", x => x.SetDuration(TimeSpan.FromMilliseconds(100)).SetDistributedCacheDuration(TimeSpan.FromSeconds(10)));
+		cache.Set<string>("foo", "sloths, sloths everywhere", x => x.SetDuration(TimeSpan.FromMilliseconds(100)).SetDistributedCacheDuration(TimeSpan.FromSeconds(10)), token: TestContext.Current.CancellationToken);
 
 		logger.LogInformation("STEP 2");
 
-		var foo1 = cache.GetOrDefault<string>("foo");
+		var foo1 = cache.GetOrDefault<string>("foo", token: TestContext.Current.CancellationToken);
 
 		Assert.Equal("sloths, sloths everywhere", foo1);
 
@@ -274,7 +272,7 @@ public partial class L1L2Tests
 		string? foo2 = null;
 		Assert.Throws<FusionCacheSerializationException>(() =>
 		{
-			foo2 = cache.GetOrDefault<string>("foo");
+			foo2 = cache.GetOrDefault<string>("foo", token: TestContext.Current.CancellationToken);
 		});
 
 		Assert.Null(foo2);
@@ -288,9 +286,9 @@ public partial class L1L2Tests
 
 		var distributedCache = CreateDistributedCache();
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
-		fusionCache.Set<int>(keyFoo, 21, opt => opt.SetFailSafe(false).SetDuration(TimeSpan.FromSeconds(1)).SetDistributedCacheDuration(TimeSpan.FromMinutes(1)));
+		fusionCache.Set<int>(keyFoo, 21, opt => opt.SetFailSafe(false).SetDuration(TimeSpan.FromSeconds(1)).SetDistributedCacheDuration(TimeSpan.FromMinutes(1)), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(TimeSpan.FromSeconds(2));
-		var value = fusionCache.GetOrDefault<int>(keyFoo);
+		var value = fusionCache.GetOrDefault<int>(keyFoo, token: TestContext.Current.CancellationToken);
 		Assert.Equal(21, value);
 	}
 
@@ -300,9 +298,9 @@ public partial class L1L2Tests
 	{
 		var distributedCache = CreateDistributedCache();
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
-		fusionCache.Set<int>("foo", 21, opt => opt.SetFailSafe(true).SetDuration(TimeSpan.FromSeconds(1)).SetDistributedCacheDuration(TimeSpan.FromMinutes(1)));
+		fusionCache.Set<int>("foo", 21, opt => opt.SetFailSafe(true).SetDuration(TimeSpan.FromSeconds(1)).SetDistributedCacheDuration(TimeSpan.FromMinutes(1)), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(TimeSpan.FromSeconds(2));
-		var value = fusionCache.GetOrDefault<int>("foo");
+		var value = fusionCache.GetOrDefault<int>("foo", token: TestContext.Current.CancellationToken);
 		Assert.Equal(21, value);
 	}
 
@@ -314,11 +312,11 @@ public partial class L1L2Tests
 
 		var distributedCache = CreateDistributedCache();
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
-		fusionCache.Set<int>(keyFoo, 21, opt => opt.SetDuration(TimeSpan.FromSeconds(1)).SetFailSafe(true, TimeSpan.FromSeconds(2)).SetDistributedCacheFailSafeOptions(TimeSpan.FromMinutes(10)));
+		fusionCache.Set<int>(keyFoo, 21, opt => opt.SetDuration(TimeSpan.FromSeconds(1)).SetFailSafe(true, TimeSpan.FromSeconds(2)).SetDistributedCacheFailSafeOptions(TimeSpan.FromMinutes(10)), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(TimeSpan.FromSeconds(2));
-		var value1 = fusionCache.GetOrDefault<int>(keyFoo, opt => opt.SetAllowStaleOnReadOnly());
+		var value1 = fusionCache.GetOrDefault<int>(keyFoo, opt => opt.SetAllowStaleOnReadOnly(), token: TestContext.Current.CancellationToken);
 		Assert.Equal(21, value1);
-		var value2 = fusionCache.GetOrDefault<int>(keyFoo);
+		var value2 = fusionCache.GetOrDefault<int>(keyFoo, token: TestContext.Current.CancellationToken);
 		Assert.Equal(0, value2);
 	}
 
@@ -333,9 +331,9 @@ public partial class L1L2Tests
 
 		var distributedCache = CreateDistributedCache();
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
-		fusionCache.Set<int>(keyFoo, 21, opt => opt.SetDuration(duration).SetFailSafe(true, maxDuration).SetDistributedCacheFailSafeOptions(maxDuration));
+		fusionCache.Set<int>(keyFoo, 21, opt => opt.SetDuration(duration).SetFailSafe(true, maxDuration).SetDistributedCacheFailSafeOptions(maxDuration), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(maxDuration.PlusALittleBit());
-		var value = fusionCache.GetOrDefault<int>(keyFoo, opt => opt.SetFailSafe(true));
+		var value = fusionCache.GetOrDefault<int>(keyFoo, opt => opt.SetFailSafe(true), token: TestContext.Current.CancellationToken);
 		Assert.Equal(21, value);
 	}
 
@@ -356,11 +354,11 @@ public partial class L1L2Tests
 			.SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType))
 		;
 
-		fusionCache1.Set<int>(keyFoo, 21, opt => opt.SetDuration(firstDuration));
+		fusionCache1.Set<int>(keyFoo, 21, opt => opt.SetDuration(firstDuration), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(firstDuration / 2);
-		var v1 = fusionCache2.GetOrDefault<int>(keyFoo, 42, opt => opt.SetDuration(secondDuration));
+		var v1 = fusionCache2.GetOrDefault<int>(keyFoo, 42, opt => opt.SetDuration(secondDuration), token: TestContext.Current.CancellationToken);
 		Thread.Sleep(firstDuration + TimeSpan.FromSeconds(1));
-		var v2 = fusionCache2.GetOrDefault<int>(keyFoo, 42, opt => opt.SetDuration(secondDuration));
+		var v2 = fusionCache2.GetOrDefault<int>(keyFoo, 42, opt => opt.SetDuration(secondDuration), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(21, v1);
 		Assert.Equal(42, v2);
@@ -377,17 +375,40 @@ public partial class L1L2Tests
 		using var fusionCache1 = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 		using var fusionCache2 = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 
-		var v1 = fusionCache1.GetOrSet<int>(keyFoo, 1, opt => opt.SetDuration(TimeSpan.FromSeconds(10)).SetFailSafe(true).SetSkipDistributedCache(true, true));
-		var v2 = fusionCache2.GetOrSet<int>(keyFoo, 2, opt => opt.SetDuration(TimeSpan.FromSeconds(10)).SetFailSafe(true));
+		var v1 = fusionCache1.GetOrSet<int>(keyFoo, 1, opt => opt.SetDuration(TimeSpan.FromSeconds(10)).SetFailSafe(true).SetSkipDistributedCache(true, true), token: TestContext.Current.CancellationToken);
+		var v2 = fusionCache2.GetOrSet<int>(keyFoo, 2, opt => opt.SetDuration(TimeSpan.FromSeconds(10)).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(1, v1);
 		Assert.Equal(2, v2);
 
-		var v3 = fusionCache1.GetOrSet<int>(keyBar, 3, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true));
-		var v4 = fusionCache2.GetOrSet<int>(keyBar, 4, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCache(true, true));
+		var v3 = fusionCache1.GetOrSet<int>(keyBar, 3, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true), token: TestContext.Current.CancellationToken);
+		var v4 = fusionCache2.GetOrSet<int>(keyBar, 4, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCache(true, true), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(3, v3);
 		Assert.Equal(4, v4);
+	}
+
+	[Theory]
+	[ClassData(typeof(SerializerTypesClassData))]
+	public void CanSkipDistributedCacheOnReadOnly(SerializerType serializerType)
+	{
+		var keyFoo = CreateRandomCacheKey("foo");
+
+		var dc = new ChaosDistributedCache(CreateDistributedCache());
+		dc.SetAlwaysThrow();
+		using var fc = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(dc, TestsUtils.GetSerializer(serializerType));
+
+		var v1 = fc.GetOrDefault<int>(
+			keyFoo,
+			options =>
+			{
+				options.ReThrowDistributedCacheExceptions = true;
+				options.SkipDistributedCacheRead = true;
+			},
+			token: TestContext.Current.CancellationToken
+		);
+
+		Assert.Equal(0, v1);
 	}
 
 	[Theory]
@@ -400,16 +421,16 @@ public partial class L1L2Tests
 		using var fusionCache1 = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 		using var fusionCache2 = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 
-		var v1 = fusionCache1.GetOrSet<int>(keyFoo, 1, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCacheReadWhenStale(true));
-		var v2 = fusionCache2.GetOrSet<int>(keyFoo, 2, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCacheReadWhenStale(true));
+		var v1 = fusionCache1.GetOrSet<int>(keyFoo, 1, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCacheReadWhenStale(true), token: TestContext.Current.CancellationToken);
+		var v2 = fusionCache2.GetOrSet<int>(keyFoo, 2, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCacheReadWhenStale(true), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(1, v1);
 		Assert.Equal(1, v2);
 
 		Thread.Sleep(TimeSpan.FromSeconds(2).PlusALittleBit());
 
-		v1 = fusionCache1.GetOrSet<int>(keyFoo, 3, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true));
-		v2 = fusionCache2.GetOrSet<int>(keyFoo, 4, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCacheReadWhenStale(true));
+		v1 = fusionCache1.GetOrSet<int>(keyFoo, 3, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true), token: TestContext.Current.CancellationToken);
+		v2 = fusionCache2.GetOrSet<int>(keyFoo, 4, opt => opt.SetDuration(TimeSpan.FromSeconds(2)).SetFailSafe(true).SetSkipDistributedCacheReadWhenStale(true), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(3, v1);
 		Assert.Equal(4, v2);
@@ -428,10 +449,10 @@ public partial class L1L2Tests
 		fusionCache1.DefaultEntryOptions.SkipDistributedCacheReadWhenStale = true;
 		fusionCache2.DefaultEntryOptions.SkipDistributedCacheReadWhenStale = true;
 
-		fusionCache1.Set(keyFoo, 21);
+		fusionCache1.Set(keyFoo, 21, token: TestContext.Current.CancellationToken);
 
-		var v1 = fusionCache1.TryGet<int>(keyFoo);
-		var v2 = fusionCache2.TryGet<int>(keyFoo);
+		var v1 = fusionCache1.TryGet<int>(keyFoo, token: TestContext.Current.CancellationToken);
+		var v2 = fusionCache2.TryGet<int>(keyFoo, token: TestContext.Current.CancellationToken);
 
 		Assert.True(v1.HasValue);
 		Assert.True(v2.HasValue);
@@ -477,22 +498,22 @@ public partial class L1L2Tests
 		using var cache = new FusionCache(CreateFusionCacheOptions()).SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 
 		// TOT REQ + 1 / FULL RESP + 1
-		var v1 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true));
+		var v1 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 
 		// CACHED -> NO INCR
-		var v2 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true));
+		var v2 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 
 		// LET THE CACHE EXPIRE
 		Thread.Sleep(duration.PlusALittleBit());
 
 		// TOT REQ + 1 / COND REQ + 1 / NOT MOD RESP + 1
-		var v3 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true));
+		var v3 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 
 		// LET THE CACHE EXPIRE
 		Thread.Sleep(duration.PlusALittleBit());
 
 		// TOT REQ + 1 / COND REQ + 1 / NOT MOD RESP + 1
-		var v4 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true));
+		var v4 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 
 		// SET VALUE -> CHANGE LAST MODIFIED
 		endpoint.SetValue(42);
@@ -501,7 +522,7 @@ public partial class L1L2Tests
 		Thread.Sleep(duration.PlusALittleBit());
 
 		// TOT REQ + 1 / COND REQ + 1 / FULL RESP + 1
-		var v5 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true));
+		var v5 = cache.GetOrSet<int>(keyFoo, (ctx, _) => FakeGet(ctx, endpoint), opt => opt.SetDuration(duration).SetFailSafe(true), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(4, endpoint.TotalRequestsCount);
 		Assert.Equal(3, endpoint.ConditionalRequestsCount);
@@ -532,32 +553,32 @@ public partial class L1L2Tests
 		cache.DefaultEntryOptions.EagerRefreshThreshold = eagerRefreshThreshold;
 
 		// EXECUTE FACTORY
-		var v1 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v1 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		// USE CACHED VALUE
-		var v2 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v2 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		// WAIT FOR EAGER REFRESH THRESHOLD TO BE HIT
 		var eagerDuration = TimeSpan.FromMilliseconds(duration.TotalMilliseconds * eagerRefreshThreshold).Add(TimeSpan.FromMilliseconds(10));
 		Thread.Sleep(eagerDuration);
 
 		// EAGER REFRESH KICKS IN
-		var v3 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v3 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		// WAIT FOR THE BACKGROUND FACTORY (EAGER REFRESH) TO COMPLETE
 		Thread.Sleep(TimeSpan.FromMilliseconds(500));
 
 		// GET THE REFRESHED VALUE
-		var v4 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v4 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		// WAIT FOR EXPIRATION
 		Thread.Sleep(duration.PlusALittleBit());
 
 		// EXECUTE FACTORY AGAIN
-		var v5 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v5 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		// USE CACHED VALUE
-		var v6 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v6 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(v1, v2);
 		Assert.Equal(v2, v3);
@@ -586,10 +607,10 @@ public partial class L1L2Tests
 		cache.DefaultEntryOptions.EagerRefreshThreshold = eagerRefreshThreshold;
 
 		// EXECUTE FACTORY
-		var v1 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v1 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		// USE CACHED VALUE
-		var v2 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v2 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 
 		// WAIT FOR EAGER REFRESH THRESHOLD TO BE HIT
 		var eagerDuration = TimeSpan.FromMilliseconds(duration.TotalMilliseconds * eagerRefreshThreshold).Add(TimeSpan.FromMilliseconds(10));
@@ -600,7 +621,7 @@ public partial class L1L2Tests
 
 		// EAGER REFRESH KICKS IN
 		var sw = Stopwatch.StartNew();
-		var v3 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks);
+		var v3 = cache.GetOrSet<long>(keyFoo, _ => DateTimeOffset.UtcNow.Ticks, token: TestContext.Current.CancellationToken);
 		sw.Stop();
 
 		var elapsedMs = sw.GetElapsedWithSafePad().TotalMilliseconds;
@@ -623,22 +644,22 @@ public partial class L1L2Tests
 		cache2.DefaultEntryOptions.Duration = TimeSpan.FromMinutes(10);
 
 		// SET ON CACHE 1 AND ON DISTRIBUTED CACHE
-		var v1 = cache1.GetOrSet<int>(keyFoo, _ => 10);
+		var v1 = cache1.GetOrSet<int>(keyFoo, _ => 10, token: TestContext.Current.CancellationToken);
 
 		// GET FROM DISTRIBUTED CACHE AND SET IT ON CACHE 2
-		var v2 = cache2.GetOrSet<int>(keyFoo, _ => 20);
+		var v2 = cache2.GetOrSet<int>(keyFoo, _ => 20, token: TestContext.Current.CancellationToken);
 
 		// SET ON DISTRIBUTED CACHE BUT SKIP CACHE 1
-		cache1.Set<int>(keyFoo, 30, opt => opt.SetSkipMemoryCache());
+		cache1.Set<int>(keyFoo, 30, opt => opt.SetSkipMemoryCache(), token: TestContext.Current.CancellationToken);
 
 		// GET FROM CACHE 1 (10) AND DON'T CALL THE FACTORY
-		var v3 = cache1.GetOrSet<int>(keyFoo, _ => 40);
+		var v3 = cache1.GetOrSet<int>(keyFoo, _ => 40, token: TestContext.Current.CancellationToken);
 
 		// GET FROM CACHE 2 (10) AND DON'T CALL THE FACTORY
-		var v4 = cache2.GetOrSet<int>(keyFoo, _ => 50);
+		var v4 = cache2.GetOrSet<int>(keyFoo, _ => 50, token: TestContext.Current.CancellationToken);
 
 		// SKIP CACHE 2, GET FROM DISTRIBUTED CACHE (30)
-		var v5 = cache2.GetOrSet<int>(keyFoo, _ => 60, opt => opt.SetSkipMemoryCache());
+		var v5 = cache2.GetOrSet<int>(keyFoo, _ => 60, opt => opt.SetSkipMemoryCache(), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(10, v1);
 		Assert.Equal(10, v2);
@@ -664,22 +685,22 @@ public partial class L1L2Tests
 		using var fusionCache = new FusionCache(CreateFusionCacheOptions(), memoryCache, logger);
 		fusionCache.SetupDistributedCache(chaosDistributedCache, TestsUtils.GetSerializer(serializerType));
 
-		fusionCache.Set<int>(keyFoo, 21, eo);
+		fusionCache.Set<int>(keyFoo, 21, eo, token: TestContext.Current.CancellationToken);
 		Thread.Sleep(TimeSpan.FromSeconds(1).PlusALittleBit());
 		chaosDistributedCache.SetAlwaysDelayExactly(simulatedDelay);
 		var sw = Stopwatch.StartNew();
 		// SHOULD RETURN IMMEDIATELY
-		fusionCache.Set<int>(keyFoo, 42, eo);
+		fusionCache.Set<int>(keyFoo, 42, eo, token: TestContext.Current.CancellationToken);
 		sw.Stop();
 		logger.Log(LogLevel.Information, "ELAPSED: {ElapsedMilliseconds}ms", sw.GetElapsedWithSafePad().TotalMilliseconds);
 
 		Thread.Sleep(TimeSpan.FromMilliseconds(200));
 		chaosDistributedCache.SetNeverDelay();
 		memoryCache.Remove(TestsUtils.MaybePreProcessCacheKey(keyFoo, TestingCacheKeyPrefix));
-		var foo1 = fusionCache.GetOrDefault<int>(keyFoo, -1, eo);
+		var foo1 = fusionCache.GetOrDefault<int>(keyFoo, -1, eo, TestContext.Current.CancellationToken);
 		Thread.Sleep(simulatedDelay.PlusALittleBit());
 		memoryCache.Remove(TestsUtils.MaybePreProcessCacheKey(keyFoo, TestingCacheKeyPrefix));
-		var foo2 = fusionCache.GetOrDefault<int>(keyFoo, -1, eo);
+		var foo2 = fusionCache.GetOrDefault<int>(keyFoo, -1, eo, TestContext.Current.CancellationToken);
 
 		var elapsedMs = sw.GetElapsedWithSafePad().TotalMilliseconds;
 		logger.LogTrace("Elapsed (with extra pad): {ElapsedMs} ms", elapsedMs);
@@ -711,7 +732,7 @@ public partial class L1L2Tests
 		using var fusionCache = new FusionCache(options, logger: CreateXUnitLogger<FusionCache>());
 		fusionCache.SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 
-		fusionCache.Set<int>(keyFoo, 21);
+		fusionCache.Set<int>(keyFoo, 21, token: TestContext.Current.CancellationToken);
 		TestOutput.WriteLine($"-- SET AT {DateTime.UtcNow}, THEO PHY EXP AT {DateTime.UtcNow + maxDuration}");
 
 		var didThrow = false;
@@ -722,7 +743,7 @@ public partial class L1L2Tests
 			do
 			{
 				Thread.Sleep(throttleDuration.PlusALittleBit());
-				fusionCache.GetOrSet<int>(keyFoo, _ => throw new Exception(exceptionMessage));
+				fusionCache.GetOrSet<int>(keyFoo, _ => throw new Exception(exceptionMessage), token: TestContext.Current.CancellationToken);
 			} while (sw.Elapsed < maxDuration + throttleDuration);
 		}
 		catch (Exception exc) when (exc.Message == exceptionMessage)
@@ -777,19 +798,19 @@ public partial class L1L2Tests
 
 		logger.LogInformation("STEP 1");
 
-		cache1.Set<int>("foo", 1, tags: ["x", "y"]);
-		cache1.Set<int>("bar", 2, tags: ["y", "z"]);
-		cache2.GetOrSet<int>("baz", _ => 3, tags: ["x", "z"]);
+		cache1.Set<int>("foo", 1, tags: ["x", "y"], token: TestContext.Current.CancellationToken);
+		cache1.Set<int>("bar", 2, tags: ["y", "z"], token: TestContext.Current.CancellationToken);
+		cache2.GetOrSet<int>("baz", _ => 3, tags: ["x", "z"], token: TestContext.Current.CancellationToken);
 
 		logger.LogInformation("STEP 2");
 
-		var foo1 = cache2.GetOrSet<int>("foo", _ => 11, tags: ["x", "y"]);
-		var bar1 = cache2.GetOrSet<int>("bar", _ => 22, tags: ["y", "z"]);
+		var foo1 = cache2.GetOrSet<int>("foo", _ => 11, tags: ["x", "y"], token: TestContext.Current.CancellationToken);
+		var bar1 = cache2.GetOrSet<int>("bar", _ => 22, tags: ["y", "z"], token: TestContext.Current.CancellationToken);
 		var baz1 = cache1.GetOrSet<int>("baz", (ctx, _) =>
 		{
 			ctx.Tags = ["x", "z"];
 			return 33;
-		});
+		}, token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(1, foo1);
 		Assert.Equal(2, bar1);
@@ -797,14 +818,14 @@ public partial class L1L2Tests
 
 		logger.LogInformation("STEP 3");
 
-		cache1.RemoveByTag("x");
+		cache1.RemoveByTag("x", token: TestContext.Current.CancellationToken);
 		Thread.Sleep(durationOverride.PlusALittleBit());
 
 		logger.LogInformation("STEP 4");
 
-		var foo2 = cache1.GetOrDefault<int>("foo");
-		var bar2 = cache1.GetOrSet<int>("bar", _ => 222, tags: ["y", "z"]);
-		var baz2 = cache2.GetOrSet<int>("baz", _ => 333, tags: ["x", "z"]);
+		var foo2 = cache1.GetOrDefault<int>("foo", token: TestContext.Current.CancellationToken);
+		var bar2 = cache1.GetOrSet<int>("bar", _ => 222, tags: ["y", "z"], token: TestContext.Current.CancellationToken);
+		var baz2 = cache2.GetOrSet<int>("baz", _ => 333, tags: ["x", "z"], token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, foo2);
 		Assert.Equal(2, bar2);
@@ -812,14 +833,14 @@ public partial class L1L2Tests
 
 		logger.LogInformation("STEP 5");
 
-		cache2.RemoveByTag("y");
+		cache2.RemoveByTag("y", token: TestContext.Current.CancellationToken);
 		Thread.Sleep(durationOverride.PlusALittleBit());
 
 		logger.LogInformation("STEP 6");
 
-		var foo3 = cache2.GetOrSet<int>("foo", _ => 1111, tags: ["x", "y"]);
-		var bar3 = cache2.GetOrSet<int>("bar", _ => 2222, tags: ["y", "z"]);
-		var baz3 = cache1.GetOrSet<int>("baz", _ => 3333, tags: ["x", "z"]);
+		var foo3 = cache2.GetOrSet<int>("foo", _ => 1111, tags: ["x", "y"], token: TestContext.Current.CancellationToken);
+		var bar3 = cache2.GetOrSet<int>("bar", _ => 2222, tags: ["y", "z"], token: TestContext.Current.CancellationToken);
+		var baz3 = cache1.GetOrSet<int>("baz", _ => 3333, tags: ["x", "z"], token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(1111, foo3);
 		Assert.Equal(2222, bar3);
@@ -862,55 +883,55 @@ public partial class L1L2Tests
 
 		logger.LogInformation("STEP 1");
 
-		cache1.Set<int>("foo", 1, options => options.SetFailSafe(true).SetDuration(TimeSpan.FromMinutes(10)));
-		cache1.Set<int>("bar", 2, options => options.SetFailSafe(true).SetDuration(TimeSpan.FromMinutes(10)));
+		cache1.Set<int>("foo", 1, options => options.SetFailSafe(true).SetDuration(TimeSpan.FromMinutes(10)), token: TestContext.Current.CancellationToken);
+		cache1.Set<int>("bar", 2, options => options.SetFailSafe(true).SetDuration(TimeSpan.FromMinutes(10)), token: TestContext.Current.CancellationToken);
 
 		logger.LogInformation("STEP 2");
 
-		var foo2_1 = cache2.GetOrDefault<int>("foo");
-		var bar2_1 = cache2.GetOrDefault<int>("bar");
+		var foo2_1 = cache2.GetOrDefault<int>("foo", token: TestContext.Current.CancellationToken);
+		var bar2_1 = cache2.GetOrDefault<int>("bar", token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(1, foo2_1);
 		Assert.Equal(2, bar2_1);
 
 		logger.LogInformation("STEP 3");
 
-		cache1.Clear();
+		cache1.Clear(token: TestContext.Current.CancellationToken);
 		Thread.Sleep(durationOverride.PlusALittleBit());
 
 		logger.LogInformation("STEP 4");
 
-		var foo2_3 = cache2.GetOrDefault<int>("foo");
-		var bar2_3 = cache2.GetOrDefault<int>("bar");
+		var foo2_3 = cache2.GetOrDefault<int>("foo", token: TestContext.Current.CancellationToken);
+		var bar2_3 = cache2.GetOrDefault<int>("bar", token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, foo2_3);
 		Assert.Equal(0, bar2_3);
 
 		logger.LogInformation("STEP 5");
 
-		var foo2_4 = cache2.GetOrDefault<int>("foo", opt => opt.SetAllowStaleOnReadOnly());
-		var bar2_4 = cache2.GetOrDefault<int>("bar", opt => opt.SetAllowStaleOnReadOnly());
+		var foo2_4 = cache2.GetOrDefault<int>("foo", opt => opt.SetAllowStaleOnReadOnly(), token: TestContext.Current.CancellationToken);
+		var bar2_4 = cache2.GetOrDefault<int>("bar", opt => opt.SetAllowStaleOnReadOnly(), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(1, foo2_4);
 		Assert.Equal(2, bar2_4);
 
 		logger.LogInformation("STEP 6");
 
-		cache1.Clear(false);
+		cache1.Clear(false, token: TestContext.Current.CancellationToken);
 		Thread.Sleep(TimeSpan.FromSeconds(3));
 
 		logger.LogInformation("STEP 7");
 
-		var foo2_5 = cache2.GetOrDefault<int>("foo");
-		var bar2_5 = cache2.GetOrDefault<int>("bar");
+		var foo2_5 = cache2.GetOrDefault<int>("foo", token: TestContext.Current.CancellationToken);
+		var bar2_5 = cache2.GetOrDefault<int>("bar", token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, foo2_5);
 		Assert.Equal(0, bar2_5);
 
 		logger.LogInformation("STEP 8");
 
-		var foo2_6 = cache2.GetOrDefault<int>("foo", opt => opt.SetAllowStaleOnReadOnly());
-		var bar2_6 = cache2.GetOrDefault<int>("bar", opt => opt.SetAllowStaleOnReadOnly());
+		var foo2_6 = cache2.GetOrDefault<int>("foo", opt => opt.SetAllowStaleOnReadOnly(), token: TestContext.Current.CancellationToken);
+		var bar2_6 = cache2.GetOrDefault<int>("bar", opt => opt.SetAllowStaleOnReadOnly(), token: TestContext.Current.CancellationToken);
 
 		Assert.Equal(0, foo2_6);
 		Assert.Equal(0, bar2_6);
@@ -949,31 +970,31 @@ public partial class L1L2Tests
 		cache3.SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 
 		// SET THE ENTRY (WITH SIZE) ON CACHE 1 (WITH SIZE LIMIT)
-		cache1.Set(key1, 1, options => options.SetSize(1));
+		cache1.Set(key1, 1, options => options.SetSize(1), token: TestContext.Current.CancellationToken);
 
 		Thread.Sleep(1_000);
 
 		// GET THE ENTRY (WITH SIZE) ON CACHE 2 (WITH SIZE LIMIT)
-		var maybe2 = cache2.TryGet<int>(key1);
+		var maybe2 = cache2.TryGet<int>(key1, token: TestContext.Current.CancellationToken);
 
 		Assert.True(maybe2.HasValue);
 		Assert.Equal(1, maybe2.Value);
 
 		// SET THE ENTRY (WITH NO SIZE) ON CACHE 3 (WITH NO SIZE LIMIT)
-		cache3.Set(key2, 2);
+		cache3.Set(key2, 2, token: TestContext.Current.CancellationToken);
 
 		Thread.Sleep(1_000);
 
 		// GET THE ENTRY (WITH NO SIZE) ON CACHE 1 (WITH SIZE LIMIT)
 		// -> FALLBACK TO THE SIZE IN THE DEFAULT ENTRY OPTIONS
-		var maybe1 = cache1.TryGet<int>(key2/*, options => options.SetSize(1)*/);
+		var maybe1 = cache1.TryGet<int>(key2/*, options => options.SetSize(1)*/, token: TestContext.Current.CancellationToken);
 
 		Assert.True(maybe1.HasValue);
 		Assert.Equal(2, maybe1.Value);
 
 		// GET THE ENTRY (WITH NO SIZE) ON CACHE 2 (WITH SIZE LIMIT)
 		// -> FALLBACK TO THE SIZE IN THE ENTRY OPTIONS
-		var maybe2bis = cache2.TryGet<int>(key2, options => options.SetSize(1));
+		var maybe2bis = cache2.TryGet<int>(key2, options => options.SetSize(1), token: TestContext.Current.CancellationToken);
 
 		Assert.True(maybe2bis.HasValue);
 		Assert.Equal(2, maybe2bis.Value);
@@ -999,23 +1020,23 @@ public partial class L1L2Tests
 		cache2.SetupDistributedCache(distributedCache, TestsUtils.GetSerializer(serializerType));
 
 		// SET ENTRY WITH Low PRIORITY
-		cache1.Set(key1, 1, options => options.SetPriority(CacheItemPriority.Low));
+		cache1.Set(key1, 1, options => options.SetPriority(CacheItemPriority.Low), token: TestContext.Current.CancellationToken);
 		// SET ENTRY WITH NeverRemove PRIORITY
-		cache1.Set(key2, 1, options => options.SetPriority(CacheItemPriority.NeverRemove));
+		cache1.Set(key2, 1, options => options.SetPriority(CacheItemPriority.NeverRemove), token: TestContext.Current.CancellationToken);
 
 		// CACHE2 HERE DOES NOT HAVE ENTRIES YET
 		Assert.Equal(2, memoryCache1.Count);
 		Assert.Equal(0, memoryCache2.Count);
 
-		cache2.TryGet<int>(key1);
-		cache2.TryGet<int>(key2);
+		cache2.TryGet<int>(key1, token: TestContext.Current.CancellationToken);
+		cache2.TryGet<int>(key2, token: TestContext.Current.CancellationToken);
 
 		// NOW BOTH CACHES HERE HAVE 2 ENTRIES
 		Assert.Equal(2, memoryCache1.Count);
 		Assert.Equal(2, memoryCache2.Count);
 
-		cache1.TryGet<int>(key1);
-		cache1.TryGet<int>(key2);
+		cache1.TryGet<int>(key1, token: TestContext.Current.CancellationToken);
+		cache1.TryGet<int>(key2, token: TestContext.Current.CancellationToken);
 
 		// SAME AS BEFORE
 		Assert.Equal(2, memoryCache1.Count);
@@ -1028,8 +1049,8 @@ public partial class L1L2Tests
 		Assert.Equal(1, memoryCache1.Count);
 		Assert.Equal(1, memoryCache2.Count);
 
-		cache2.TryGet<int>(key1);
-		cache2.TryGet<int>(key2);
+		cache2.TryGet<int>(key1, token: TestContext.Current.CancellationToken);
+		cache2.TryGet<int>(key2, token: TestContext.Current.CancellationToken);
 
 		// NOW CACHE2 HAS 2 ENTRIES AGAIN, CACHE1 ONLY 1
 		Assert.Equal(1, memoryCache1.Count);

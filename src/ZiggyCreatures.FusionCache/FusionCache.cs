@@ -64,12 +64,10 @@ public sealed partial class FusionCache
 
 	internal readonly string TagInternalCacheKeyPrefix;
 
-	internal const string ClearRemoveTag = "!";
 	internal readonly string ClearRemoveTagCacheKey;
 	internal readonly string ClearRemoveTagInternalCacheKey;
 	internal long ClearRemoveTimestamp;
 
-	internal const string ClearExpireTag = "*";
 	internal readonly string ClearExpireTagCacheKey;
 	internal readonly string ClearExpireTagInternalCacheKey;
 	internal long ClearExpireTimestamp;
@@ -87,7 +85,10 @@ public sealed partial class FusionCache
 			throw new ArgumentNullException(nameof(optionsAccessor));
 
 		// OPTIONS
-		_options = optionsAccessor.Value ?? throw new NullReferenceException($"No options have been provided via {nameof(optionsAccessor.Value)}.");
+		_options = optionsAccessor.Value;
+
+		if (_options is null)
+			throw new NullReferenceException($"No options have been provided via {nameof(optionsAccessor.Value)}.");
 
 		// DUPLICATE OPTIONS (TO AVOID EXTERNAL MODIFICATIONS)
 		_options = _options.Duplicate();
@@ -180,12 +181,12 @@ public sealed partial class FusionCache
 		TagInternalCacheKeyPrefix = GetTagInternalCacheKey("");
 
 		ClearRemoveTimestamp = -1;
-		ClearRemoveTagCacheKey = GetTagCacheKey(ClearRemoveTag);
-		ClearRemoveTagInternalCacheKey = GetTagInternalCacheKey(ClearRemoveTag);
+		ClearRemoveTagCacheKey = GetTagCacheKey(_options.InternalStrings.ClearRemoveTag);
+		ClearRemoveTagInternalCacheKey = GetTagInternalCacheKey(_options.InternalStrings.ClearRemoveTag);
 
 		ClearExpireTimestamp = -1;
-		ClearExpireTagCacheKey = GetTagCacheKey(ClearExpireTag);
-		ClearExpireTagInternalCacheKey = GetTagInternalCacheKey(ClearExpireTag);
+		ClearExpireTagCacheKey = GetTagCacheKey(_options.InternalStrings.ClearExpireTag);
+		ClearExpireTagInternalCacheKey = GetTagInternalCacheKey(_options.InternalStrings.ClearExpireTag);
 
 		// CHECK FOR CACHE KEY PREFIX
 		if (memoryCache is not null && CacheName != FusionCacheOptions.DefaultCacheName && string.IsNullOrWhiteSpace(_options.CacheKeyPrefix))
@@ -272,6 +273,13 @@ public sealed partial class FusionCache
 
 	private void MaybePreProcessCacheKey(ref string key)
 	{
+		if (_cacheKeyPrefix is not null)
+			key = _cacheKeyPrefix + key;
+	}
+
+	private void MaybePreProcessCacheKey(ref string key, out string originalKey)
+	{
+		originalKey = key;
 		if (_cacheKeyPrefix is not null)
 			key = _cacheKeyPrefix + key;
 	}
@@ -638,9 +646,9 @@ public sealed partial class FusionCache
 			throw new InvalidOperationException("This operation requires Tagging, which has been disabled via FusionCacheOptions.DisableTagging.");
 	}
 
-	private static string GetTagCacheKey(string tag)
+	private string GetTagCacheKey(string tag)
 	{
-		return $"__fc:t:{tag}";
+		return $"{_options.InternalStrings.TagCacheKeyPrefix}{tag}";
 	}
 
 	private string GetTagInternalCacheKey(string tag)
@@ -994,7 +1002,7 @@ public sealed partial class FusionCache
 
 	// ADAPTIVE CACHING
 
-	private void UpdateAdaptiveOptions<TValue>(FusionCacheFactoryExecutionContext<TValue> ctx, ref FusionCacheEntryOptions options)
+	private static void UpdateAdaptiveOptions<TValue>(FusionCacheFactoryExecutionContext<TValue> ctx, ref FusionCacheEntryOptions options)
 	{
 		// UPDATE ADAPTIVE OPTIONS
 		var maybeNewOptions = ctx.GetOptions();
