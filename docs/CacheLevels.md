@@ -8,7 +8,7 @@
 
 | ⚡ TL;DR (quick version) |
 | -------- |
-| To ease cold starts and/or help with horizontal scalability (multiple nodes with their own local memory cache) it's possible to setup a 2nd level. At setup time, simply pass any implementation of `IDistributedCache` and a serializer: the existing code does not need to change, it all just works. |
+| To ease cold starts and/or help with horizontal scalability (multiple nodes with their own local memory cache) it's possible to setup a 2nd level, known as L2. At setup time, simply pass any implementation of `IDistributedCache` and a serializer: the existing code does not need to change, it all just works. |
 
 When our apps restarts and we are using only the 1st level (memory), the cache will need to be repopulated from scratch since the cached values are stored only in the memory space of the apps themselves.
 
@@ -39,43 +39,45 @@ Luckily, FusionCache can help us.
 
 FusionCache allows us to have 2 caching levels, transparently handled by FusionCache for us:
 
-- **1️⃣ Primary (Memory)**: it's a memory cache and is used to have a very fast access to data in memory, with high data locality. You can give FusionCache any implementation of `IMemoryCache` or let FusionCache create one for you
-- **2️⃣ Secondary (Distributed)**: is an *optional* distributed cache and it serves the purpose of **easing a cold start** or **sharing data with other nodes**
+- **1️⃣ L1 (memory)**: it's a memory cache and is used to have a very fast access to data in memory, with high data locality. You can give FusionCache any implementation of `IMemoryCache` or let FusionCache create one for you
+- **2️⃣ L2 (distributed)**: is an *optional* distributed cache and it serves the purpose of **easing a cold start** or **sharing data with other nodes**
 
 Everything required to have the 2 levels communicate between them is handled transparently for us.
 
-Since the 2nd level is distributed, and we know from the [fallacies of distributed computing](https://en.wikipedia.org/wiki/Fallacies_of_distributed_computing) that stuff can bo bad, all the issues that may happend there can be automatically handled by FusionCache to not impact the overall application, all while (optionally) logging any detail of it for further investigation.
+Since L2 is distributed, and we know from the [fallacies of distributed computing](https://en.wikipedia.org/wiki/Fallacies_of_distributed_computing) that stuff can go bad, all the issues that may happend there can be automatically handled by FusionCache to not impact the overall application, all while (optionally) tracking any detail of it for further investigation (via [Logging](Logging.md) and [OpenTelemetry](OpenTelemetry.md)).
 
-Any implementation of the standard `IDistributedCache` interface will work (see below for a list of the available ones), so we can pick Redis, Memcached or any technology we like.
+Any implementation of the standard `IDistributedCache` interface will work (see [below](#-packages) for a list of the available ones), so we can pick Redis, Memcached or any technology we like.
 
-Because a distributed cache talks in binary data (meaning `byte[]`) we also need to specify a *serializer*: since .NET does not have a generic interface representing a binary serializer, FusionCache defined one named `IFusionCacheSerializer`. We simply provide an implementation of that by picking one of the existing ones, which natively support formats like Json, MessagePack and Protobuf (see below) or create our own.
+Because a distributed cache talks in binary data (meaning `byte[]`) we also need to specify a *serializer*: since .NET does not have a generic interface representing a binary serializer, FusionCache defined one named `IFusionCacheSerializer`. We simply provide an implementation of that by picking one of the existing ones, which natively support formats like Json, Protobuf, MessagePack and more (see below) or create our own.
 
-In the end this basically it boils down to 2 possible ways:
+In the end this boils down to 2 possible ways:
 
 - **MEMORY ONLY (L1):** FusionCache will act as a normal memory cache
-- **MEMORY + DISTRIBUTED (L1+L2):** if we also setup a 2nd level, FusionCache will automatically coordinate the 2 levels gracefully handling all edge cases to get a smooth experience
+- **MEMORY + DISTRIBUTED (L1+L2):** if we also setup an L2, FusionCache will automatically coordinate the 2 levels, while gracefully handling all edge cases to get a smooth experience
 
 Of course in both cases you will also have at your disposal the added ability to enable extra features, like [fail-safe](FailSafe.md), advanced [timeouts](Timeouts.md) and so on.
 
 Also, if needed, we can use a different `Duration` specific for the distributed cache via the `DistributedCacheDuration` option: in this way updates to the distributed cache can be picked up more frequently, in case we don't want to use a [backplane](Backplane.md) for some reason.
 
-Finally we can even execute the distributed cache operations in the background, to make things even faster: we can read more on the related [docs page](BackgroundDistributedOperations.md).
+Finally we can even execute the distributed operations in the background, to make things even faster: we can read more on the related [docs page](BackgroundDistributedOperations.md).
 
 
-## 📢 Backplane
+## 📢 Backplane ([more](Backplane.md))
 
-When using a distributed 2nd level, each local memory cache may become out of sync with the other nodes after a change: to solve this, it is suggested to also use a backplane.
+When using multiple nodes for horizontal scalability we can use an L2 as a shared cache for all the nodes to use.
+
+But each L1 cache in each node may become out of sync with the other nodes after a change on a specific node: to solve this, it is suggested to also use a backplane.
 
 All the existing code will remain the same, it's just a 1 line change at setup time.
 
 Read [here](Backplane.md) for more.
 
 
-## 🧬 Diagrams
+## 🧬 Diagrams ([more](Diagrams.md))
 
 Good, good, so FusionCache takes care of coordinating everything between L1, L2 and maybe the backplane, if enabled.
 
-But... it can still be complicated to make up our mind about it, right? It would be just nice to be able to _visualize_ what we just said... so, diagrams!
+But... it can still be complex to grasp all of that at once, right? Wouldn't it be nice to be able to _visualize_ what we just said? Yes, it would so: diagrams!
 
 <div align="center">
 
@@ -86,29 +88,108 @@ But... it can still be complicated to make up our mind about it, right? It would
 Read [here](Diagrams.md) for more.
 
 
+## ✉️ Wire Format Envelope
+
+Something that may surprise at first is that what ends up in L2 is not _only_ the values we want to cache: there's more.
+
+This is because to allow FusionCache to do all the things that it does, some extra bits of informations are needed, like the timestamp at which an entry has been created, or the entry's tags to support [Tagging](Tagging.md) or more.
+
+When we think about it, we need to put that data somewhere so it makes total sense right?
+
+So how is it stored? Well the value + the metadata is put into a structure we can call the _envelope_, which really is the cache entry itself.
+
+And this, in turn, means that if we do this:
+
+```c#
+cache.Set("foo", 123, tags: ["tag-1", "tag-2"])
+```
+
+and we are using, for example, a JSON serializer and Redis as L2, what ends up inside our beloved Redis instance for the cache key `"foo"` will NOT be this:
+
+```json
+123
+```
+
+but more something like this:
+
+```json5
+{
+  "value": 123,
+  "timestamp": 123456789,
+  "tags": ["tag-1", "tag-2"],
+  // MORE METADATA HERE...
+}
+```
+
+As said this all makes sense when we think about it, but sometimes it may surprise people looking into their Redis instance for the first time and finding "something more".
+
+
 ## 🗃 Wire Format Versioning
 
 When working with the memory cache, everything is easier: at every run of our apps or services everything starts clean, from scratch, so even if there's a change in the structure of the cache entries used by FusionCache there's no problem.
 
 The distributed cache, instead, is a different beast: when saving a cache entry in there, that data is shared between different instances of the same applications, between different applications altogether and maybe even with different applications that are using a different version of FusionCache.
 
-So when the structure of the cache entries need to change to evolve FusionCache, how can this be managed?
+As seen above what gets saved into our L2 is not just the value itself, but a structure which contains the value + some metadata, but what happens when the structure of the cache entries (envelope) needs to change to evolve FusionCache?
 
-Easy, by using an additional cache key modifier for the distributed cache, so that if and when the version of the cache entry structure changes, there will be no issues serializing or deserializing different versions of the saved data.
+See, the problem is that a distributed cache is _kinda_ like a database in this regard, meaning we can save data there, stop the app, change something, restart it and now the app will try to deserialize an old version of our data structures into a new one, and this can create problems.
 
-In practice this means that, when saving something for the cache key `"foo"`, in reality in the distributed cache it will be saved with the cache key `"v0:foo"`.
+So, how can FusionCache managed this?
 
-This has been planned from the beginning, and is the way to manage changes in the wire format used in the distributed cache between updates: it has been designed in this way specifically to support FusionCache to be updated safely and transparently, without interruptions or problems.
+Easy, by using an additional cache key modifier for the distributed cache, so that if and when the version of the cache entry structure changes, there will be no issues serializing or deserializing a new version of the data.
 
-So what happens when there are 2 versions of FusionCache running on the same distributed cache instance, for example when two different apps share the same distributed cache and one is updated and the other is not?
+In practice this means that when doing something like this:
 
-Since the old version will write to the distributed cache with a different cache key than the new version, this will not create conflicts during the update, and it means that we don't need to stop all the apps and services that works on it and wipe all the distributed cache data just to do the upgrade.
+```c#
+cache.Set("foo", 123, tags: ["tag-1", "tag-2"])
+```
 
-At the same time though, if we have different apps and services that use the same distributed cache shared between them, we need to understand that by updating only one app or service and not the others will mean that the ones updated will read/write using the new distributed cache keys, while the non updated ones will keep read/write using the old distributed cache keys.
+the actual cache key that will be used inside of our Redis instance will NOT be just:
+
+```text
+foo
+```
+
+but in reality something like:
+
+```text
+v2:foo
+```
+
+This has been planned from the beginning, and is the way to manage changes in the wire format (envelope) used in the distributed cache between updates: it has been designed in this way specifically to support FusionCache to be updated safely and transparently, without interruptions or problems, even when used by multiple app instances with different versions of FusionCache.
+
+So what happens when there are 2 versions of FusionCache running on the _same_ distributed cache instance, for example when two different apps share the same distributed cache and one is updated and the other is not?
+
+Since the old version will write to the distributed cache with a different cache key than the new version, this will not create conflicts during the update, and it means that we don't need to stop all the apps and services that works on it and wipe all the distributed cache data just to do the upgrade (not very pragmatic).
+
+At the same time though, if we have different apps and services that use the same distributed cache shared between them, we need to understand that by updating only one app or service and not the others will mean that the ones updated will read/write using the new distributed cache keys, while the non-updated ones will keep read/write using the old distributed cache keys.
 
 Again, nothing catastrophic, but something to consider.
 
-## 💾 Disk Cache
+Since we are talking about L2 cache keys, something else to keep in mind is that if we are using a `CacheKeyPrefix` (see [here](NamedCaches.md#-cache-key-prefix)) that is also combined to form the final cache key used inside our distributed cache.
+
+This means that, if we specified a `CacheKeyPrefix` like `"MyPrefix:"`, when we do this:
+
+```c#
+cache.Set("foo", 123, tags: ["tag-1", "tag-2"])
+```
+
+the cache key used inside our L1 (memory cache) will be this:
+
+```text
+MyPrefix:foo
+```
+
+while the cache key used inside our L2 (distributed cache) will be:
+
+```text
+v2:MyPrefix:foo
+```
+
+As one last note to recap: why does the cache key inside L1 doesn't need the extra `"v2:"` prefix? Because it's a _memory_ cache, meaning that at every restart of our app the memory cache will be empty, everything will start from scratch and therefore we can't have issues of old VS new structures.
+
+
+## 💾 Disk Cache ([more](DiskCache.md))
 
 In certain situations we may like to have some of the benefits of a 2nd level like better cold starts (when the memory cache is initially empty) but at the same time we don't want to have a separate **actual** distributed cache to handle, or we simply cannot have it: a good example may be a mobile app, where everything should be self contained.
 
@@ -118,7 +199,7 @@ Is this possible?
 
 Yes, totally, and there's a [dedicated page](DiskCache.md) to learn more.
 
-## ↩️ Auto-Recovery
+## ↩️ Auto-Recovery ([more](AutoRecovery.md))
 
 Since the distributed cache is a distributed component (just like the backplane), most of the transient errors that may occur on it are also covered by the Auto-Recovery feature.
 
